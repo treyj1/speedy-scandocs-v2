@@ -81,9 +81,11 @@ def check_window(root, main_window):
             count = window.list.count()
             if count != 1:
                 raise RuntimeError(f"expected to find 1 scan, found {count}")
+            if not window.windowIcon().availableSizes():
+                raise RuntimeError("the logo file is missing from the package")
         finally:
             window.close()
-    return "opened, found 1 scan"
+    return "opened, logo loaded, found 1 scan"
 
 
 def run(main_window, report_path):

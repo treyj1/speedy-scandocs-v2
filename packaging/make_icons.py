@@ -1,25 +1,29 @@
-"""Saves the folder drawn by app.py as packaging/icon.ico and icon.icns. Rerun only if the icon changes."""
+"""Makes packaging/icon.icns from GDJ Logo.png. Rerun only if the logo changes.
 
-import io
-import os
-import sys
+Mac icons sit on a rounded tile, 824 pixels of a 1024 pixel square. The tile also keeps the blue
+logo readable in a dark Dock. Windows uses GDJ Logo.ico as it is.
+"""
+
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from PIL import Image, ImageDraw
 
-from PIL import Image
-from PySide6.QtCore import QBuffer
-from PySide6.QtWidgets import QApplication
-
-import app as ui
-
-qapp = QApplication([])
-buffer = QBuffer()
-buffer.open(QBuffer.WriteOnly)
-ui.folder_pixmap(1024).save(buffer, "PNG")
-image = Image.open(io.BytesIO(bytes(buffer.data()))).convert("RGBA")
+SIZE = 1024
+TILE = 824
+LOGO = 640
+RADIUS = 185
+SMOOTH = 4       # draw the tile large, then shrink it, for clean corners
 
 here = Path(__file__).resolve().parent
-image.save(here / "icon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-image.save(here / "icon.icns")
+logo = Image.open(here.parent / "GDJ Logo.png").convert("RGBA")
+logo = logo.crop(logo.getchannel("A").getbbox())
+logo.thumbnail((LOGO, LOGO), Image.LANCZOS)
+
+inset = (SIZE - TILE) // 2
+tile = Image.new("RGBA", (SIZE * SMOOTH, SIZE * SMOOTH), (0, 0, 0, 0))
+ImageDraw.Draw(tile).rounded_rectangle(
+    (inset * SMOOTH, inset * SMOOTH, (inset + TILE) * SMOOTH - 1, (inset + TILE) * SMOOTH - 1),
+    radius=RADIUS * SMOOTH, fill="white")
+icon = tile.resize((SIZE, SIZE), Image.LANCZOS)
+icon.alpha_composite(logo, ((SIZE - logo.width) // 2, (SIZE - logo.height) // 2))
+icon.save(here / "icon.icns")

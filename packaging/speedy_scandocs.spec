@@ -22,7 +22,7 @@ a = Analysis(
     # keyring finds Windows Credential Manager or the Mac Keychain by name at run time, through its
     # package metadata, so PyInstaller can't see either one on its own.
     hiddenimports=collect_submodules("keyring.backends"),
-    datas=copy_metadata("keyring"),
+    datas=[(str(ROOT / "GDJ Logo.png"), ".")] + copy_metadata("keyring"),
     excludes=["tkinter", "unittest.test"],
 )
 pyz = PYZ(a.pure)
@@ -33,7 +33,7 @@ exe = EXE(
     exclude_binaries=True,
     name=NAME,
     console=False,
-    icon=str(ROOT / "packaging" / ("icon.icns" if sys.platform == "darwin" else "icon.ico")),
+    icon=str(ROOT / "packaging" / "icon.icns") if sys.platform == "darwin" else str(ROOT / "GDJ Logo.ico"),
 )
 coll = COLLECT(exe, a.binaries, a.datas, name=NAME)
 

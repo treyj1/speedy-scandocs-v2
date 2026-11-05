@@ -277,7 +277,8 @@ Try a new Mac build on a real Mac. It can't reach Bedrock, a scanner or the Keyc
 
 To build for this computer only: `pip install pyinstaller`, then
 `python -m PyInstaller packaging/speedy_scandocs.spec --noconfirm`. The app is in `dist`.
-`packaging/make_icons.py` remakes the icons from the drawing in `app.py`.
+`GDJ Logo.png` is the logo in the app and `GDJ Logo.ico` is the Windows icon. If the logo changes,
+replace both and run `packaging/make_icons.py` to remake the Mac icon.
 
 Neither app is signed, which is why Windows and macOS warn on first opening (see the top of this
 file). Removing those warnings takes a paid certificate: an Apple Developer account for the Mac.

@@ -31,6 +31,7 @@ import theme
 import tour
 
 HERE = Path(__file__).resolve().parent
+LOGO = HERE / "GDJ Logo.png"
 VIEWS = ("new", "named", "review", "failed", "completed")
 TITLES = {"new": "Home", "named": "Named", "review": "Review", "failed": "Failed", "completed": "Ready to File"}
 
@@ -1230,6 +1231,9 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         top.setContentsMargins(4, 0, 2, 10)
         top.setSpacing(16)
+        self.logo = QLabel()
+        self.logo.setPixmap(logo_tile(30))
+        top.addWidget(self.logo)
         top.addWidget(QLabel("Speedy Scandocs", objectName="brand"))
         self.version = QLabel(f"v{engine.VERSION}", objectName="brandVersion")
         top.addWidget(self.version)
@@ -1842,28 +1846,26 @@ def demo_root():
     return HERE / "test" / "app_demo"
 
 
-def folder_pixmap(size):
-    """A yellow file folder. packaging/make_icons.py saves this as the release icons."""
-    pixmap = QPixmap(size, size)
+def logo_tile(size):
+    """The GDJ logo on a paper tile, because its blue is hard to read on the dark desk."""
+    sharp = 3                                     # stays crisp on high-resolution screens
+    side = size * sharp
+    pixmap = QPixmap(side, side)
     pixmap.fill(Qt.transparent)
+    logo = QPixmap(str(LOGO)).scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     p = QPainter(pixmap)
     p.setRenderHint(QPainter.Antialiasing)
-    u = size / 16
     p.setPen(Qt.NoPen)
-    p.setBrush(QColor("#B98F3E"))
-    p.drawRoundedRect(QRectF(1 * u, 2.5 * u, 6.5 * u, 4 * u), u, u)
-    p.drawRoundedRect(QRectF(1 * u, 4 * u, 14 * u, 10 * u), u, u)
-    p.setBrush(QColor(theme.FOLDERS["review"]["fill"]))
-    p.drawRoundedRect(QRectF(1 * u, 5.5 * u, 14 * u, 8.5 * u), u, u)
+    p.setBrush(QColor(theme.PAPER))
+    p.drawRoundedRect(QRectF(0, 0, side, side), 6 * sharp, 6 * sharp)
+    p.drawPixmap(0, 0, logo)
     p.end()
+    pixmap.setDevicePixelRatio(sharp)
     return pixmap
 
 
 def app_icon():
-    icon = QIcon()
-    for size in (16, 32, 64, 256):
-        icon.addPixmap(folder_pixmap(size))
-    return icon
+    return QIcon(str(LOGO))
 
 
 def report_crash(kind, value, tb):
