@@ -84,6 +84,12 @@ def rows(first, last=None):
     return target
 
 
+def file_button(t):
+    """The File button on the first row. It's painted on the row, so it isn't a widget of its own."""
+    row = t.win.list.visualItemRect(t.win.list.item(0))
+    return on_window(t.win.list.viewport(), t.win.list.itemDelegate().button_rect(row).toAlignedRect())
+
+
 def page(t):
     """The page itself in the open document, not the empty space around it."""
     image = t.win.preview.image
@@ -110,7 +116,7 @@ def on_window(widget, rect):
 #
 # view     the folder to show
 # sheet    a dialog to lay open on the window
-# stage    "preview", "working" or "undo": something that only appears while the app is in use
+# stage    "preview" or "undo": something that only appears while the app is in use
 # unchecked  show Home before Check Scandocs Folder has been clicked
 # row      which file to select
 # target   where the spotlight lands. Leave it out for a note in the middle of the window
@@ -121,65 +127,42 @@ FOLDER_TOUR = (("new", "New scans from the scanner."),
                ("named", "Matched a client on your list."),
                ("review", "A new client, or Claude wasn't sure."),
                ("failed", "Claude couldn't come up with a name."),
-               ("completed", "Checked by you and ready to put away."))
+               ("completed", "Checked by you and ready to file."))
 
 SETTINGS = dict(view="completed", sheet="settings")
 
 STEPS = (
     dict(view="new", unchecked=True, title="Welcome to Speedy Scandocs",
-         text="Speedy Scandocs reads each scan and suggests a file name, so all you have to do is check "
-              "its work.\n\nThis tour shows you around using pretend files. Your real files are safe "
-              "while it runs.",
+         text="Speedy Scandocs reads each scan and suggests a file name. You check its work, then file "
+              "each document right from the app.\n\nThis tour shows you around using pretend files. "
+              "Your real files are safe while it runs.",
          note="Click Next or press the Right arrow to move on. Press Esc to leave at any time."),
     dict(view="new", unchecked=True, target=all_tabs, title="Your five folders",
-         text="Every scan sits in one of these folders. Click a tab to open that folder. The number on "
-              "the tab tells you how many files are inside.",
+         text="Every scan sits in one of these folders. The number on each tab tells you how many files "
+              "are inside.",
          folders=FOLDER_TOUR),
     dict(view="new", unchecked=True, target=lambda t: t.win.check_btn, title="Check for new scans",
          text="Start here. Click this to see what the scanner has saved. Home stays empty until you do, "
               "even if scans are waiting."),
-    dict(view="new", target=rows(0, 3), title="See what came in",
-         text="New scans are listed here with the plain names the scanner gave them. The Home tab now "
-              "shows how many there are."),
     dict(view="new", target=lambda t: t.win.process_btn, title="Let Claude name them",
          text="Click Auto Process and Claude reads each scan and suggests a name. Each file then moves "
               "on its own to Named, Review or Failed.",
          note="This button only wakes up after Check Scandocs Folder finds something."),
-    dict(view="new", stage="working", target=lambda t: t.win.progress_box, title="While Claude works",
-         text="The bar shows how far along it is, and the line above it shows which file it's reading.\n\n"
-              "Need to stop early? Click Stop. Claude finishes the file it's on, and the rest stay in "
-              "Home for next time."),
     dict(view="named", target=tab("named"), title="Start with Named",
          text="When Claude is done, work through the folders from left to right. These files matched a "
-              "client on your list, so most only need a quick look."),
-    dict(view="named", target=rows(0), title="Reading a row",
-         text="The client is on the left and the description is beside it. The small line underneath "
-              "says how Claude worked it out.\n\nClick a row to select it, or use the Up and Down arrows."),
+              "client on your list, so most only need a quick look. The small line under each file says "
+              "how Claude worked it out."),
     dict(view="named", stage="preview", target=page, side="right", title="Open the document",
          text="With a file selected, press Space or double-click it to see the actual document.\n\n"
-              "Claude's name is only a suggestion, so this is where you check it."),
-    dict(view="named", stage="preview", target=lambda t: t.win.preview.keys, title="Getting around",
-         text="The keys are listed along the bottom in case you forget.",
-         keys=(("Up / Down", "Go to the next or previous document."),
-               ("Left / Right", "Turn the pages."),
-               ("Enter", "The name is right."),
-               (engine.RENAME_KEY, "Change the name."),
-               ("Space", "Close the document."))),
+              "Claude's name is only a suggestion, so this is where you check it.",
+         note="The keys you can use are listed along the bottom."),
     dict(view="named", target=lambda t: t.win.name_edit, title="The suggested name",
          text="Names go like this: LAST, First, then a dash, then a short description.\n\n"
-              f"To change one, press {engine.RENAME_KEY} or click in the box. As you type a client, matching names from "
-              "your list pop up to choose from."),
+              f"To change one, press {engine.RENAME_KEY} or click in the box."),
     dict(view="named", target=lambda t: t.win.confirm_btn, title="Accept the name",
          text="If the name is right, press Enter or click Correct. The file moves to Ready to File with "
               "that name.",
-         note="After you change a name, this button says Save instead."),
-    dict(view="named", sheet="ask", target=lambda t: t.sheet.card, title="One more look",
-         text="You'll see this quick check before a file moves. Press Enter for yes, or Esc to go back.",
-         note="Don't need it? You can turn it off in Settings."),
-    dict(view="named", stage="preview", sheet="rename", target=lambda t: t.sheet.name, side="below",
-         title="Fix a name while reading",
-         text=f"Press {engine.RENAME_KEY} with a document open and this box pops up with the name already filled in, so "
-              "you can change just the part that's wrong. Press Enter to save."),
+         note="Claude learns from each name you accept or fix, so it should need less fixing over time."),
     dict(view="named", stage="undo", target=lambda t: t.win.toast, title="Changed your mind?",
          text=f"This message shows up after each move. Click Undo or press {engine.UNDO_KEY} and the file goes back "
               "where it was.",
@@ -195,16 +178,14 @@ STEPS = (
               "person, just fix the name."),
     dict(view="failed", target=rows(0, 1), title="Then, Failed",
          text="Claude couldn't come up with a name for these, or the file wouldn't open. Open the "
-              "document, type the name in the box at the bottom, and press Enter."),
-    dict(view="failed", target=lambda t: t.win.retry_btn, title="Try again",
-         text="Think Claude could do better a second time? This sends the file back to Home. It goes "
-              "through Auto Process again with your next batch."),
-    dict(view="completed", target=rows(0, 1), title="Ready to File",
-         text="Every file you've accepted ends up here with its new name.",
-         note="Claude learns from each name you accept or fix, so it should need less fixing over time."),
-    dict(view="completed", target=lambda t: t.win.open_btn, title="Put them away",
-         text="Click this to open the folder on your computer, then move each file into its client's "
-              "folder. That last step is done by hand."),
+              "document, type the name in the box at the bottom, and press Enter.",
+         note="Try Again sends a file back to Home for your next Auto Process."),
+    dict(view="completed", target=file_button, title="File each document",
+         text="Every file you accept lands here with its new name. Click File, or press Enter, and "
+              "choose the folder the document belongs in. Click File in that window, then confirm.\n\n"
+              "The next document starts at the same folder.",
+         note="Undo works here too. You can still move files yourself with Open Ready to File Folder, "
+              "but those moves aren't added to the filing log."),
     dict(view="completed", target=desk_link("Settings"), title="Settings",
          text="You won't need Settings every day, but it's worth knowing what's in there. Here's a "
               "quick look."),
@@ -216,44 +197,26 @@ STEPS = (
               "points to the same shared folder, the whole office stays in step."),
     dict(SETTINGS, target=lambda t: [t.sheet.key, t.sheet.test_btn], title="Bedrock API key",
          text="The key is what lets the app reach Claude. Paste it here, then click Test to make sure "
-              f"it works. It's kept safely {engine.KEY_STORE}, not in a file."),
-    dict(SETTINGS, target=lambda t: [t.sheet.model, t.sheet.region], title="Model and region",
-         text="You can leave these alone unless someone asks you to change them. The recommended model "
-              "is marked in the list."),
-    dict(SETTINGS, target=lambda t: [t.sheet.confirm_twice, t.sheet.guidance], title="Two choices",
-         text="The first box turns the “Is this name correct?” check on or off. The second shows or "
-              "hides the short instructions on each screen."),
+              f"it works. It's kept safely {engine.KEY_STORE}, not in a file.",
+         note="Leave the model and region alone unless someone asks you to change them."),
     dict(SETTINGS, target=sheet_link("Add a Naming Rule"), title="Add a Naming Rule",
          text="Want files named a certain way from now on? Click here to add a rule or change one you "
               "already have. Claude helps with the wording, and you get the last word."),
     dict(view="completed", sheet="rule", target=lambda t: t.sheet.box, title="Say it in your own words",
          text="Type what you'd like the way you'd say it to a coworker, then click Review. Claude will "
-              "work out the wording for you.",
-         note="The list below this box picks which Claude writes the rule. The recommended one is fine."),
-    dict(view="completed", sheet="rule_review", target=lambda t: t.sheet.conflict, title="Claude checks your other rules",
+              "work out the wording for you."),
+    dict(view="completed", sheet="rule_review", target=lambda t: [t.sheet.conflict, t.sheet.options],
+         title="Claude checks your other rules",
          text="Claude compares your request with the rules you already have. If they could clash, it "
-              "shows you the rule here. This won't always show up."),
-    dict(view="completed", sheet="rule_review", target=lambda t: t.sheet.options, title="Pick what to do",
-         text="You'll always get a clear choice, with Claude's recommendation marked. It might be new "
-              "wording for the new rule, new wording for the old one, or leaving things as they are."),
-    dict(view="completed", sheet="rule_review", target=lambda t: t.sheet.rule_box, title="Check the wording",
-         text="This is the rule exactly as it would be saved. If you'd like it worded differently, you "
-              "can change it right here.",
-         note="If the option changes a rule you already have, the current rule is shown above so you "
-              "can compare them."),
+              "shows you the rule here.\n\nThen pick what to do. Claude's recommendation is marked, and "
+              "you can change the wording before you save."),
     dict(view="completed", sheet="rule_review", target=lambda t: t.sheet.save_btn, title="Nothing changes until you say so",
          text="This button follows your choice, and a saved rule applies from your next Auto Process. "
               "Click Back if you'd rather start over.",
          note="Your old rules are saved as a backup first. The app keeps the three most recent."),
-    dict(SETTINGS, target=lambda t: [sheet_link("Client list")(t), sheet_link("Activity log")(t)],
+    dict(SETTINGS, target=lambda t: [sheet_link("Client list")(t), sheet_link("Filing log")(t)],
          title="Your lists and records",
-         text="These open the files behind the app.",
-         keys=(("Client list", "Everyone Claude can match a scan to."),
-               ("Naming rules", "All of your rules. Add a Naming Rule is the easiest way to change them."),
-               ("Activity log", "A record of every file Claude has read."))),
-    dict(SETTINGS, target=lambda t: t.sheet.usage, title="What it costs",
-         text="This shows how much Claude has been used, and a rough cost for the last 7 days and for "
-              "overall. Your actual bill may be a little different."),
+         text="These open the files behind the app. The filing log shows where each document was filed."),
     dict(view="completed", target=desk_link("Guide"), title="That's everything",
          text="You're ready to go. Click Guide whenever you want to take this tour again."),
 )
@@ -534,13 +497,6 @@ class Tour(QWidget):
         stage = step.get("stage")
         if stage == "preview":
             win.preview.open()
-        elif stage == "working":
-            win.status.setText(f"Reading 2 of {len(SAMPLE_SCANS)}:  {SAMPLE_SCANS[1]}")
-            win.bar.setRange(0, len(SAMPLE_SCANS))
-            win.bar.setValue(1)
-            win.progress_box.show()
-            win.check_btn.setEnabled(False)
-            win.process_btn.setEnabled(False)
         elif stage == "undo":
             win.toast.say("Moved to Ready to File.", can_undo=True, ms=3_600_000)
         if step.get("sheet") != self.sheet_name:
@@ -553,7 +509,6 @@ class Tour(QWidget):
         self.win.preview.hide()
         self.win.toast.hide()
         self.win.toast.timer.stop()
-        self.win.progress_box.hide()
 
     def open_sheet(self, name):
         self.sheet = self.sheets[name]()

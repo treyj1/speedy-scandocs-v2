@@ -41,7 +41,8 @@ GUIDE = {
              "or fix it below.",
     "review": "A new client, or Claude wasn't sure which client. The reason is under each file.",
     "failed": "Claude couldn't name these. Read the file, type the name below, and press Enter.",
-    "completed": "These are ready. Open the folder and move each file to its client's folder.",
+    "completed": "These are ready. Click File or press Enter, choose the folder, and confirm. "
+                 "The next one starts at the same folder.",
 }
 EMPTY = {
     "new": "No new scans.",
@@ -64,6 +65,11 @@ def usage_line(label, usage):
     return f"{label}: {usage['input']:,} input tokens, {usage['output']:,} output tokens, {money}"
 
 
+def breakable(path):
+    """Lets a long path wrap at each folder. Windows paths have no other place to break, so they'd run off a popup."""
+    return path.replace(os.sep, os.sep + "​")
+
+
 def tinted(color, alpha):
     c = QColor(color)
     c.setAlpha(alpha)
@@ -79,12 +85,59 @@ def display_font(size, weight=QFont.DemiBold):
 
 
 class Row(QStyledItemDelegate):
-    """One line on the page: client, description, Claude's note, and a stamp if it needs one."""
+    """
+    One line on the page: client, description, Claude's note, and a stamp if it needs one. Files in
+    Ready to File also get a File button, painted here because a real one would swallow the row's clicks.
+    """
 
     HEIGHT = 58
+    BUTTON_WIDTH = 64
+    BUTTON_HEIGHT = 32
+    file_clicked = Signal()
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.hot = None                  # the row number whose File button the mouse is on
 
     def sizeHint(self, option, index):
         return QSize(option.rect.width(), self.HEIGHT)
+
+    def button_rect(self, rect):
+        return QRectF(rect.right() - 12 - self.BUTTON_WIDTH, rect.center().y() - self.BUTTON_HEIGHT / 2 + 1,
+                      self.BUTTON_WIDTH, self.BUTTON_HEIGHT)
+
+    def editorEvent(self, event, model, option, index):
+        # The press isn't handled here: letting it through is what selects the row being filed.
+        if event.type() in (QEvent.MouseMove, QEvent.MouseButtonRelease) and index.data(Qt.UserRole).bucket == "completed":
+            over = self.button_rect(option.rect).contains(event.position())
+            if event.type() == QEvent.MouseMove:
+                self.set_hot(index.row() if over else None, option)
+            elif over and event.button() == Qt.LeftButton:
+                self.file_clicked.emit()
+                return True
+        return super().editorEvent(event, model, option, index)
+
+    def set_hot(self, row, option):
+        if row != self.hot:
+            self.hot = row
+            option.widget.viewport().setCursor(Qt.ArrowCursor if row is None else Qt.PointingHandCursor)
+            option.widget.viewport().update()
+
+    def draw_button(self, p, option, index):
+        hot = index.row() == self.hot and bool(option.state & QStyle.State_MouseOver)
+        box = self.button_rect(option.rect)
+        fill = QLinearGradient(box.topLeft(), box.bottomLeft())
+        fill.setColorAt(0, QColor("#454C56" if hot else "#343A42"))
+        fill.setColorAt(1, QColor("#2B3037" if hot else theme.INK))
+        p.setBrush(fill)
+        p.setPen(QPen(QColor("#000000"), 1))
+        p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3)
+        font = QFont(option.font)
+        font.setPixelSize(14)
+        font.setWeight(QFont.DemiBold)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(box, Qt.AlignCenter, "File")
 
     def paint(self, p, option, index):
         item = index.data(Qt.UserRole)
@@ -99,6 +152,9 @@ class Row(QStyledItemDelegate):
         p.drawLine(r.bottomLeft() + QPointF(0, -0.5), r.bottomRight() + QPointF(0, -0.5))
 
         left, right = r.left() + 18, r.right() - 16
+        if item.bucket == "completed":
+            self.draw_button(p, option, index)
+            right -= self.BUTTON_WIDTH + 12
         if item.tag:
             right -= self.draw_stamp(p, item.tag, right, r.center().y()) + 16
 
@@ -794,7 +850,7 @@ class BatchWorker(QThread):
 class Preview(QWidget):
     """
     Press Space on a file. Up and Down change documents, Left and Right change pages, Enter accepts
-    the name, F2 changes it, and Space or Esc closes.
+    the name or, in Ready to File, files the document, F2 changes the name, and Space or Esc closes.
     """
 
     def __init__(self, win):
@@ -860,6 +916,8 @@ class Preview(QWidget):
             if not self.win.is_unnamed(item):
                 keys.append("Enter: name is right")
             keys.append(f"{engine.RENAME_KEY}: change name")
+        elif item.bucket == "completed":
+            keys.append("Enter: file it")
         keys.append("Space: close")
         self.keys.setText("   ·   ".join(keys))
 
@@ -892,6 +950,11 @@ class Preview(QWidget):
                 self.win.list.setCurrentRow(row)
                 self.page = 0
                 self.draw()
+        elif key in (Qt.Key_Return, Qt.Key_Enter) and self.win.view == "completed":
+            if self.win.file_current():
+                self.after_confirm(True)
+            else:
+                self.setFocus()
         elif key in (Qt.Key_Return, Qt.Key_Enter):
             self.after_confirm(self.win.confirm_current())
         elif key == Qt.Key_F2 and self.can_name():
@@ -1075,7 +1138,8 @@ class SettingsDialog(CardDialog):
         row.setSpacing(2)
         for text, fn in (("Client list", lambda: win.open_settings_file("client_list")),
                          ("Naming rules", lambda: win.open_settings_file("rules_file")),
-                         ("Activity log", lambda: win.open_settings_file("log_file"))):
+                         ("Activity log", lambda: win.open_settings_file("log_file")),
+                         ("Filing log", lambda: win.open_settings_file("filing_log"))):
             b = QPushButton(text, objectName="link")
             b.setAutoDefault(False)
             b.setCursor(Qt.PointingHandCursor)
@@ -1301,7 +1365,9 @@ class MainWindow(QMainWindow):
         self.stack.setContentsMargins(0, 0, 0, 0)
 
         self.list = QListWidget()
-        self.list.setItemDelegate(Row(self.list))
+        rows = Row(self.list)
+        rows.file_clicked.connect(self.file_current, Qt.QueuedConnection)     # once the click is done with the list
+        self.list.setItemDelegate(rows)
         self.list.setUniformItemSizes(True)
         self.list.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -1519,7 +1585,10 @@ class MainWindow(QMainWindow):
                     self.preview.open()
                     return True
                 if key in (Qt.Key_Return, Qt.Key_Enter):
-                    self.confirm_current()
+                    if self.view == "completed":
+                        self.file_current()
+                    else:
+                        self.confirm_current()
                     return True
                 if key == Qt.Key_F2 and self.action_bar.isVisible():
                     self.name_edit.setFocus()
@@ -1679,6 +1748,62 @@ class MainWindow(QMainWindow):
         self.refresh()
         self.draw_list(select_name=undo.source.name)
 
+    def filing_start(self):
+        """Where the folder picker opens: the last folder used, or as near to it as still exists."""
+        last = Path(self.settings["last_file_folder"] or Path.home())
+        return next((str(folder) for folder in (last, *last.parents) if folder.is_dir()), str(Path.home()))
+
+    def pick_filing_folder(self, item, start):
+        """Windows' or the Mac's own picker, so mapped drives and network shares all work. '' if cancelled."""
+        picker = QFileDialog(self, f"File {item.stem}", start)
+        picker.setFileMode(QFileDialog.Directory)
+        picker.setOption(QFileDialog.ShowDirsOnly)
+        picker.setLabelText(QFileDialog.Accept, "File")
+        return str(Path(picker.selectedFiles()[0])) if picker.exec() and picker.selectedFiles() else ""
+
+    def confirm_filing(self, item, folder):
+        body = f"This will move it to:\n{breakable(folder)}"
+        name = engine.unique_path(folder, item.name).name
+        if name != item.name:
+            body += f"\n\nA file with this name is already there, so this one will be saved as {name}."
+        return self.ask("File this document?", body, "File", "Go back", name=item.stem)
+
+    def file_current(self):
+        """The File button or Enter in Ready to File. Returns True if the document moved."""
+        item = self.current()
+        if not item or item.bucket != "completed":
+            return False
+        start = self.filing_start()
+        while True:
+            folder = self.pick_filing_folder(item, start)
+            if not folder:
+                self.list.setFocus()
+                return False
+            start = folder
+            problem = engine.filing_problem(self.ws, folder)
+            if problem:
+                if not self.ask("Choose a different folder", problem, "Choose Again", "Cancel",
+                                name=breakable(folder)):
+                    self.list.setFocus()
+                    return False
+            elif self.confirm_filing(item, folder):
+                break
+        try:
+            self.last_undo = engine.file_document(self.ws, item, folder)
+        except OSError as e:
+            self.toast.say(f"That file couldn't be filed. It, or the filing log, may be open somewhere else. "
+                           f"({type(e).__name__})")
+            self.refresh()
+            self.list.setFocus()
+            return False
+        self.undo_view = "completed"
+        self.settings["last_file_folder"] = folder
+        self.save_settings()
+        self.refresh()
+        self.list.setFocus()
+        self.toast.say(f"Filed in {Path(folder).name or folder}.", can_undo=True)
+        return True
+
     def retry_current(self):
         item = self.current()
         if not item:
@@ -1721,9 +1846,6 @@ class MainWindow(QMainWindow):
             return dialog
 
         return dict(settings=lambda: SettingsDialog(self),
-                    ask=lambda: AskDialog(self, "Is this name correct?", "", "Yes, correct", "Go back",
-                                          name=self.current().stem),
-                    rename=lambda: RenameDialog(self, self.current(), self.current().stem),
                     rule=rule_box,
                     rule_review=lambda: rule_box(review=True))
 

@@ -8,7 +8,7 @@ The app works on one chosen scans folder:
         Review\                  named, but needs a person: new client, or unsure
         Failed\                  Claude could not name it
         Ready to File\           a person confirmed it; ready to file by hand
-        Settings\                client list, naming rules, decisions, log
+        Settings\                client list, naming rules, decisions, logs
 
 Learning: when staff confirm or correct a file, the decision is written to
 Settings\decisions.csv and shown to Claude on later runs. A new client joins the
@@ -45,7 +45,7 @@ RENAME_KEY = "fn+F2" if MAC else "F2"      # Mac laptops need fn for the F keys
 KEY_STORE = "in this Mac's Keychain" if MAC else "in Windows"
 
 NONE = "NONE"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 SETTLE_SECONDS = 10           # skip a file the scanner may still be writing
 PAGES_FIRST_PASS = 2
@@ -178,6 +178,7 @@ LOG_FIELDS = ["time", "original", "result", "new_name", "client", "description",
               "pages_read", "input", "cache_read", "cache_write", "output", "sha256", "model"]
 DECISION_FIELDS = ["time", "sha256", "original_scan", "claude_named", "final_name", "action",
                    "what_claude_saw"]
+FILING_FIELDS = ["time", "file_name", "client", "description", "folder", "full_path"]
 
 # Results written to the log, and the bucket each one lands in.
 RESULT_BUCKET = {"named": "named", "new client": "review", "check": "review",
@@ -213,6 +214,7 @@ DEFAULT_SETTINGS = {
     "show_guidance": True,
     "confirm_twice": True,
     "guide_seen": False,
+    "last_file_folder": "",              # where the last document was filed. The next one starts there.
 }
 
 
@@ -280,6 +282,7 @@ class Workspace:
         self.rule_backups = self.settings_dir / "Rule Backups"
         self.decisions_file = self.settings_dir / "decisions.csv"
         self.log_file = self.settings_dir / "scandocs_log.csv"
+        self.filing_log = self.settings_dir / "filing_log.csv"
 
     def folder(self, bucket):
         return self.root / FOLDER_NAMES[bucket]
@@ -348,7 +351,7 @@ def set_up_settings_folder(folder, current=None):
     Path(folder).mkdir(parents=True, exist_ok=True)
     target = Workspace(folder, folder)
     if current:
-        for attr in ("client_list", "rules_file", "decisions_file", "log_file"):
+        for attr in ("client_list", "rules_file", "decisions_file", "log_file", "filing_log"):
             source, copy = getattr(current, attr), getattr(target, attr)
             if source.exists() and not copy.exists():
                 shutil.copy2(source, copy)
@@ -534,6 +537,25 @@ def append_csv(path, fields, row):
         if new:
             w.writeheader()
         w.writerow(row)
+
+
+def drop_last_row(path, fields, column, value):
+    """Forget the newest row whose column has this value."""
+    rows = read_csv(path)
+    for i in range(len(rows) - 1, -1, -1):
+        if rows[i].get(column) == value:
+            del rows[i]
+            break
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fields, restval="", extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+
+def can_write(path):
+    """Raises OSError if a file can't be written right now, say because it's open in Excel."""
+    with open(path, "a", encoding="utf-8"):
+        pass
 
 
 def file_hash(path):
@@ -1100,6 +1122,48 @@ def run_batch(ws, bedrock, model_id, settle_seconds=SETTLE_SECONDS, on_progress=
     return summary
 
 
+# ---------------------------------------------------------------- filing
+
+def filing_problem(ws, folder):
+    """Why a document can't be filed in this folder, or ''. The app's own folders would lose track of it."""
+    chosen = Path(folder).resolve()
+    working = [ws.root, ws.settings_dir] + [ws.folder(bucket) for bucket in BUCKETS]
+    if any(chosen == path.resolve() for path in working):
+        return "This is one of Speedy Scandocs' own folders. Choose the folder the document belongs in."
+    return ""
+
+
+def file_document(ws, item, folder):
+    """
+    Move a file out of Ready to File to its final folder and log the whole path. Nothing already in
+    that folder is replaced. If the log can't be written the file stays put, so the log misses nothing.
+    """
+    can_write(ws.filing_log)
+    dest = unique_path(folder, item.name)
+    try:
+        shutil.move(str(item.path), str(dest))
+    except OSError:
+        if item.path.exists():
+            dest.unlink(missing_ok=True)      # a partial copy to another drive. The original is safe.
+        raise
+    append_csv(ws.filing_log, FILING_FIELDS, {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "file_name": dest.name,
+        "client": client_from_filename(dest.name) or "",
+        "description": item.stem.partition(" - ")[2],
+        "folder": str(dest.parent),
+        "full_path": str(dest),
+    })
+    return Undo(source=item.path, dest=dest, filed=True)
+
+
+def undo_filing(ws, undo):
+    """Put a filed document back in Ready to File and take it out of the filing log."""
+    can_write(ws.filing_log)
+    shutil.move(str(undo.dest), str(unique_path(undo.source.parent, undo.source.name)))
+    drop_last_row(ws.filing_log, FILING_FIELDS, "full_path", str(undo.dest))
+
+
 # ---------------------------------------------------------------- decisions (learning)
 
 @dataclass
@@ -1109,6 +1173,7 @@ class Undo:
     sha256: str = ""
     added: list = field(default_factory=list)
     respelled: list = field(default_factory=list)     # (old, new)
+    filed: bool = False                               # moved out of Ready to File to its final folder
 
 
 def is_new_client_change(ws, item, final_stem):
@@ -1173,18 +1238,13 @@ def confirm_file(ws, item, final_stem):
 
 def undo_decision(ws, undo):
     """Put the last confirmed file back where it was and forget the decision."""
+    if undo.filed:
+        undo_filing(ws, undo)
+        return
     undo.source.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(undo.dest), str(undo.source))
     if undo.sha256:
-        rows = read_csv(ws.decisions_file)
-        for i in range(len(rows) - 1, -1, -1):
-            if rows[i]["sha256"] == undo.sha256:
-                del rows[i]
-                break
-        with open(ws.decisions_file, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=DECISION_FIELDS)
-            w.writeheader()
-            w.writerows(rows)
+        drop_last_row(ws.decisions_file, DECISION_FIELDS, "sha256", undo.sha256)
     if undo.added:
         remove_clients(ws.client_list, undo.added)
     for old, new in undo.respelled:

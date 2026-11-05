@@ -24,8 +24,8 @@ first, then creates:
 | `Named` | Matched a client on the list |
 | `Review` | Named, but a new client or Claude wasn't sure |
 | `Failed` | Claude couldn't name it, or the file wouldn't open |
-| `Ready to File` | A person confirmed it. Staff file these by hand |
-| `Settings` | Client list, naming rules, decisions, activity log, unless a shared settings folder is chosen |
+| `Ready to File` | A person confirmed it, and it's waiting to be filed |
+| `Settings` | Client list, naming rules, decisions, activity log, filing log, unless a shared settings folder is chosen |
 
 In the app, the first tab is **Home** (the scans folder itself). A scans folder set up by an earlier
 version has a `Completed` folder; it is renamed to `Ready to File` the next time the app opens it.
@@ -41,11 +41,29 @@ popup with the suggested name filled in, so part of it can be changed. With the 
 the box at the bottom changes the name and Enter saves it. Ctrl+Z undoes the last one. Asking "Is
 this name correct?" a second time is on by default and can be turned off in Settings.
 
+**Filing:** in Ready to File, each file has a **File** button. Clicking it, or pressing Enter, opens the
+computer's own folder picker, so mapped drives and network shares work as usual. Choose the folder,
+click **File** in the picker, and confirm in the popup, where Enter works. Go back returns to the
+picker. Pressing Enter inside Windows' picker doesn't accept the folder, and the app can't change
+that: a picker built into the app was tried and dropped, to stay with the system's own on Windows and
+Mac. The next file
+starts at the folder used last, and that's remembered between sessions on each computer. Enter also
+works from the preview, so a document can be read and filed in one go. A file with the same name is
+never replaced: the new one gets a number after its name, and the popup says so first. Ctrl+Z or
+Undo puts the last document back. The app's own folders can't be chosen. **Open Ready to File Folder**
+still works for moving files by hand, but those moves aren't logged.
+
+**Filing log:** every document filed through the app gets a row in `Settings\filing_log.csv`: `time`,
+`file_name`, `client`, `description`, `folder` and `full_path`. Undo removes the row. If the log can't
+be written, for example because it's open in Excel, the document stays in Ready to File and the app
+says so, so the log never misses one. It's kept so the app can recommend a location some day. Nothing
+reads it yet. Like the other logs, it's shared when a shared settings folder is chosen.
+
 **Model:** Claude Haiku 5.5 is the recommended model and the default for new installs. A computer
 that already saved a choice keeps it until someone changes it in Settings.
 
 **Shared settings:** in Settings, **Settings folder** can point anywhere, so the office can share one
-client list, one set of rules, the decisions Claude learns from, and the activity log, even when each
+client list, one set of rules, the decisions Claude learns from, and the activity and filing logs, even when each
 computer has its own scans folder. Point every computer at the same folder. If the chosen folder has
 `client_list.txt` and `naming_rules.txt`, it's used as it is. If not, the app offers to choose another
 folder or create them there, copying what's in use now and never replacing anything. The old files stay
