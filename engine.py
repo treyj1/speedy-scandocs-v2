@@ -38,6 +38,12 @@ KEYRING_SERVICE = "SpeedyScandocs"
 KEYRING_USER = "bedrock-api-key"
 KEY_PIECE_SIZE = 1000          # Windows allows about 1,280 characters per credential
 
+# Words the window and guide use that differ between Windows and Mac.
+MAC = sys.platform == "darwin"
+UNDO_KEY = "Cmd+Z" if MAC else "Ctrl+Z"
+RENAME_KEY = "fn+F2" if MAC else "F2"      # Mac laptops need fn for the F keys
+KEY_STORE = "in this Mac's Keychain" if MAC else "in Windows"
+
 NONE = "NONE"
 VERSION = "1.0.0"
 BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')

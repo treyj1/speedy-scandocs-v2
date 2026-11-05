@@ -1,4 +1,4 @@
-"""Exits with an error if a library the app needs is missing or too old. Used by the .vbs launcher."""
+"""Exits with an error if a library the app needs is missing or too old. Used by the Windows and Mac launchers."""
 
 import importlib.metadata as metadata
 

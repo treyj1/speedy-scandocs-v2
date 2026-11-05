@@ -2,11 +2,21 @@
 
 ## The app (start here)
 
-Double-click **Speedy Scandocs.vbs**. The first time, it offers to install what it needs.
-This version is for Windows.
+Most people should install the packaged app, which needs no Python:
+
+- **Windows:** unzip `Speedy-Scandocs-<version>-Windows.zip`, keep the whole folder together, and open
+  **Speedy Scandocs.exe** inside it. It isn't signed, so the first time Windows may show "Windows
+  protected your PC". Click **More info**, then **Run anyway**.
+- **Mac (Apple Silicon only):** unzip `Speedy-Scandocs-<version>-Mac.zip` and drag **Speedy Scandocs**
+  to Applications. It isn't signed by Apple, so macOS refuses it the first time. Click **Done**, go to
+  **System Settings**, **Privacy & Security**, click **Open Anyway** at the bottom, and confirm.
+
+To run it from this folder instead, double-click **Speedy Scandocs.vbs** on Windows or **Speedy
+Scandocs.command** on a Mac. The first time, it offers to install what it needs.
 
 In **Settings**, choose the scans folder and paste the Bedrock API key. The key is kept in Windows
-Credential Manager, not in a file. When a new folder is chosen, the app asks first, then creates:
+Credential Manager or the Mac Keychain, not in a file. When a new folder is chosen, the app asks
+first, then creates:
 
 | Folder | What's in it |
 |---|---|
@@ -66,7 +76,11 @@ logged before the model was recorded are priced at the model chosen in Settings.
 Claude on later runs. A new client joins the client list only when a person confirms that file.
 Unless a shared settings folder is chosen, each scans folder has its own client list and rules.
 
-**Tests:** `python test/test_app.py` (no AI, no key).
+**On a Mac:** the app works the same, except that Cmd+Z undoes and laptops need fn+F2 to change a
+name. The background script below is for Windows only.
+
+**Tests:** `python test/test_app.py` (no AI, no key). Those tests stay on the development computer,
+so a release is tested by `self_check.py` instead, which needs no client data.
 
 The rest of this file describes the older background script, `scandocs.py`, which still works.
 
@@ -215,7 +229,8 @@ all set up in the office after installing:
   names to either one.
 - **Scans folder:** `scan_folder` in `DEFAULT_SETTINGS` stays empty. The real choice is saved in
   `%APPDATA%\SpeedyScandocs\settings.json` on each computer, outside this folder.
-- **API key:** It's kept in Windows Credential Manager on each computer, so it's never in a file here.
+- **API key:** It's kept in Windows Credential Manager or the Mac Keychain on each computer, so it's
+  never in a file here.
 - **Test data:** `.gitignore` leaves out all of `test/`, including `test/fake_answers.csv`,
   `test/client_list_test*.txt`, `test/app_demo/` and `test/live_test/`, along with any `.pdf` or `.csv`
   file. These hold names from real-looking documents. `../files-test/` is outside the repository.
@@ -237,3 +252,32 @@ Before each push:
    `test/live_test/Settings/client_list.txt` and `test/fake_answers.csv`, and in the file names under
    `test/app_demo/` and `test/live_test/`. Remove any real name found. "GARCIA LOPEZ, Maria" is a
    made-up example and can stay.
+
+### Making a release
+
+Windows and Mac apps are built by GitHub, in `.github/workflows/release.yml`, because a Mac app can
+only be built on a Mac. Each one is built with `packaging/speedy_scandocs.spec`, then opened on its
+own system with `--self-check` (`self_check.py`). If that fails, nothing is released.
+
+1. Change `VERSION` in `engine.py`, and push.
+2. To try a build first: on GitHub, **Actions**, **Build release**, **Run workflow**. The zips are on
+   the run's page for 7 days.
+3. To release, tag it. The tag must be `v` plus `VERSION`, or the build stops:
+   ```
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+4. The zips land on a draft in **Releases**. Try each one, then click **Publish release**.
+
+The repository is private, so only people with access to it can download from Releases. Share the
+zips with the office some other way, such as Dropbox.
+
+The self-check proves the packaged app opens and its libraries work, not that a person can use it.
+Try a new Mac build on a real Mac. It can't reach Bedrock, a scanner or the Keychain's real keys.
+
+To build for this computer only: `pip install pyinstaller`, then
+`python -m PyInstaller packaging/speedy_scandocs.spec --noconfirm`. The app is in `dist`.
+`packaging/make_icons.py` remakes the icons from the drawing in `app.py`.
+
+Neither app is signed, which is why Windows and macOS warn on first opening (see the top of this
+file). Removing those warnings takes a paid certificate: an Apple Developer account for the Mac.

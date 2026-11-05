@@ -163,11 +163,11 @@ STEPS = (
          keys=(("Up / Down", "Go to the next or previous document."),
                ("Left / Right", "Turn the pages."),
                ("Enter", "The name is right."),
-               ("F2", "Change the name."),
+               (engine.RENAME_KEY, "Change the name."),
                ("Space", "Close the document."))),
     dict(view="named", target=lambda t: t.win.name_edit, title="The suggested name",
          text="Names go like this: LAST, First, then a dash, then a short description.\n\n"
-              "To change one, press F2 or click in the box. As you type a client, matching names from "
+              f"To change one, press {engine.RENAME_KEY} or click in the box. As you type a client, matching names from "
               "your list pop up to choose from."),
     dict(view="named", target=lambda t: t.win.confirm_btn, title="Accept the name",
          text="If the name is right, press Enter or click Correct. The file moves to Ready to File with "
@@ -178,10 +178,10 @@ STEPS = (
          note="Don't need it? You can turn it off in Settings."),
     dict(view="named", stage="preview", sheet="rename", target=lambda t: t.sheet.name, side="below",
          title="Fix a name while reading",
-         text="Press F2 with a document open and this box pops up with the name already filled in, so "
+         text=f"Press {engine.RENAME_KEY} with a document open and this box pops up with the name already filled in, so "
               "you can change just the part that's wrong. Press Enter to save."),
     dict(view="named", stage="undo", target=lambda t: t.win.toast, title="Changed your mind?",
-         text="This message shows up after each move. Click Undo or press Ctrl+Z and the file goes back "
+         text=f"This message shows up after each move. Click Undo or press {engine.UNDO_KEY} and the file goes back "
               "where it was.",
          note="Undo only reaches the last file you moved."),
     dict(view="review", target=rows(0, 1), title="Next, Review",
@@ -216,7 +216,7 @@ STEPS = (
               "points to the same shared folder, the whole office stays in step."),
     dict(SETTINGS, target=lambda t: [t.sheet.key, t.sheet.test_btn], title="Bedrock API key",
          text="The key is what lets the app reach Claude. Paste it here, then click Test to make sure "
-              "it works. It's kept safely in Windows, not in a file."),
+              f"it works. It's kept safely {engine.KEY_STORE}, not in a file."),
     dict(SETTINGS, target=lambda t: [t.sheet.model, t.sheet.region], title="Model and region",
          text="You can leave these alone unless someone asks you to change them. The recommended model "
               "is marked in the list."),

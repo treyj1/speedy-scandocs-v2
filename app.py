@@ -1,12 +1,15 @@
 """
-Speedy Scandocs: the app window. Start it with "Speedy Scandocs.vbs".
+Speedy Scandocs: the app window. Start it with "Speedy Scandocs.vbs" (Windows) or
+"Speedy Scandocs.command" (Mac). A packaged release is just the app.
 
     python app.py          normal use
     python app.py --demo   practice with the sample scans. No AI, no key, nothing real is touched.
+    python app.py --self-check=report.txt   prove a packaged copy works. See self_check.py.
 
 All the file and Claude work is in engine.py. This file is only the window.
 """
 
+import os
 import shutil
 import sys
 import traceback
@@ -23,6 +26,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QButtonGroup, QC
                                QProgressBar, QPushButton, QRadioButton, QStackedLayout, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget)
 
 import engine
+import self_check
 import theme
 import tour
 
@@ -854,7 +858,7 @@ class Preview(QWidget):
         if self.can_name():
             if not self.win.is_unnamed(item):
                 keys.append("Enter: name is right")
-            keys.append("F2: change name")
+            keys.append(f"{engine.RENAME_KEY}: change name")
         keys.append("Space: close")
         self.keys.setText("   ·   ".join(keys))
 
@@ -1476,7 +1480,7 @@ class MainWindow(QMainWindow):
         elif self.is_unnamed(item):
             self.set_hint("Type it as LAST, First - Description.")
         elif self.settings["show_guidance"]:
-            self.set_hint("Space to read the file. Enter if the name is right. F2 to change it.")
+            self.set_hint(f"Space to read the file. Enter if the name is right. {engine.RENAME_KEY} to change it.")
         else:
             self.set_hint("")
 
@@ -1816,7 +1820,7 @@ class MainWindow(QMainWindow):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        # Back from Explorer: files may have moved.
+        # Back from File Explorer or Finder: files may have moved.
         if (event.type() == QEvent.ActivationChange and self.isActiveWindow() and hasattr(self, "preview")
                 and not self.worker and not self.preview.isVisible()):
             self.refresh()
@@ -1838,23 +1842,27 @@ def demo_root():
     return HERE / "test" / "app_demo"
 
 
+def folder_pixmap(size):
+    """A yellow file folder. packaging/make_icons.py saves this as the release icons."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    p = QPainter(pixmap)
+    p.setRenderHint(QPainter.Antialiasing)
+    u = size / 16
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor("#B98F3E"))
+    p.drawRoundedRect(QRectF(1 * u, 2.5 * u, 6.5 * u, 4 * u), u, u)
+    p.drawRoundedRect(QRectF(1 * u, 4 * u, 14 * u, 10 * u), u, u)
+    p.setBrush(QColor(theme.FOLDERS["review"]["fill"]))
+    p.drawRoundedRect(QRectF(1 * u, 5.5 * u, 14 * u, 8.5 * u), u, u)
+    p.end()
+    return pixmap
+
+
 def app_icon():
-    """A yellow file folder."""
     icon = QIcon()
     for size in (16, 32, 64, 256):
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.transparent)
-        p = QPainter(pixmap)
-        p.setRenderHint(QPainter.Antialiasing)
-        u = size / 16
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor("#B98F3E"))
-        p.drawRoundedRect(QRectF(1 * u, 2.5 * u, 6.5 * u, 4 * u), u, u)
-        p.drawRoundedRect(QRectF(1 * u, 4 * u, 14 * u, 10 * u), u, u)
-        p.setBrush(QColor(theme.FOLDERS["review"]["fill"]))
-        p.drawRoundedRect(QRectF(1 * u, 5.5 * u, 14 * u, 8.5 * u), u, u)
-        p.end()
-        icon.addPixmap(pixmap)
+        icon.addPixmap(folder_pixmap(size))
     return icon
 
 
@@ -1871,11 +1879,17 @@ def report_crash(kind, value, tb):
 
 
 def main():
-    sys.excepthook = report_crash
+    check = [arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("--self-check=")]
+    if check:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")      # build computers have no screen
+    else:
+        sys.excepthook = report_crash      # its popup would wait forever with no one to click OK
     app = QApplication(sys.argv)
     app.setApplicationName("Speedy Scandocs")
     app.setStyle("Fusion")
     app.setStyleSheet(theme.QSS)
+    if check:
+        sys.exit(self_check.run(MainWindow, check[0]))
     demo = "--demo" in sys.argv
     # Only one copy at a time, so the same scans can't be processed twice.
     lock = QLockFile(str(engine.app_data_dir() / ("demo.lock" if demo else "app.lock")))

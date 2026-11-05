@@ -1,0 +1,8 @@
+# A Windows line ending stops a Mac script from starting, so these are fixed on every computer.
+* text=auto
+*.command text eol=lf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
+
+*.ico binary
+*.icns binary

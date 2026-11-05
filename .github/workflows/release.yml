@@ -1,0 +1,109 @@
+# Builds the Windows and Mac apps and tests each one on its own system.
+#
+#   Run workflow (Actions tab): builds and tests, and keeps the zips on the run page for 7 days.
+#   Push a tag such as v1.0.0:  the same, then attaches the zips to a draft release.
+#
+# See "Releases on GitHub" in README.md.
+
+name: Build release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build for ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+          - os: macos-latest      # Apple Silicon
+            label: Mac
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -r requirements.txt pyinstaller==6.19.0
+
+      - name: Read the version and check the tag
+        id: version
+        shell: bash
+        run: |
+          version=$(python -c "import engine; print(engine.VERSION)" | tr -d '\r')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match VERSION $version in engine.py"
+            exit 1
+          fi
+
+      - name: Build
+        run: python -m PyInstaller packaging/speedy_scandocs.spec --noconfirm
+
+      - name: Self-check the Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $run = Start-Process -FilePath "dist\Speedy Scandocs\Speedy Scandocs.exe" `
+                               -ArgumentList "--self-check=self_check.txt" -Wait -PassThru
+          if (Test-Path self_check.txt) { Get-Content self_check.txt }
+          exit $run.ExitCode
+
+      - name: Self-check the Mac app
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: |
+          status=0
+          "dist/Speedy Scandocs.app/Contents/MacOS/Speedy Scandocs" --self-check=self_check.txt || status=$?
+          cat self_check.txt || true
+          exit $status
+
+      - name: Zip the Windows app
+        if: runner.os == 'Windows'
+        run: python -c "import shutil; shutil.make_archive('Speedy-Scandocs-${{ steps.version.outputs.version }}-Windows', 'zip', 'dist', 'Speedy Scandocs')"
+
+      - name: Zip the Mac app
+        if: runner.os == 'macOS'
+        # ditto keeps the links and signature inside the app. Plain zip breaks them.
+        run: ditto -c -k --keepParent "dist/Speedy Scandocs.app" "Speedy-Scandocs-${{ steps.version.outputs.version }}-Mac.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: speedy-scandocs-${{ matrix.label }}
+          path: Speedy-Scandocs-*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Attach to a draft release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: release-files
+          merge-multiple: true
+
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-files/*.zip \
+            --repo "$GITHUB_REPOSITORY" --title "Speedy Scandocs $GITHUB_REF_NAME" --generate-notes --draft
