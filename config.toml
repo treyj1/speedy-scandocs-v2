@@ -1,0 +1,48 @@
+# Speedy Scandocs v2 settings.
+# Paths can be absolute (C:\Scans\Inbox) or relative to this file.
+# Use single quotes for Windows paths so backslashes are kept as-is.
+
+# {dropbox} means this computer's Dropbox folder (the team Dropbox if there is one),
+# so the same settings work on any computer. Adjust the folder names after it to match
+# the office Dropbox. Only ONE computer should run the scheduled task.
+
+# Where the scanner drops new PDFs.
+scan_folder   = '{dropbox}\Scans\Inbox'
+
+# Where named files go ("LAST, First - Description.pdf").
+named_folder  = '{dropbox}\Scans\Named'
+
+# Where files go for a quick human look: proposed new clients (already named; drag to
+# Named if right) and files with no client name found (original name; rename, then drag).
+review_folder = '{dropbox}\Scans\Needs Review'
+
+# Shared settings live in Dropbox too, so they can be edited from any computer and are backed up.
+# One client per line, "LAST, First". Can start empty: new clients are added
+# automatically when staff approve them.
+client_list      = '{dropbox}\Scans\Settings\client_list.txt'
+
+# Plain-English rules staff can edit any time. Read fresh on every run.
+rules_file       = '{dropbox}\Scans\Settings\naming_rules.txt'
+
+# Written by the script when staff rename its files. Safe to edit or prune by hand.
+corrections_file = '{dropbox}\Scans\Settings\corrections.csv'
+
+# Every file processed, with tokens used. Open in Excel.
+log_file         = '{dropbox}\Scans\Settings\scandocs_log.csv'
+
+# Amazon Bedrock. The API key goes in the AWS_BEARER_TOKEN_BEDROCK environment
+# variable, never in this file.
+aws_region = 'us-west-2'
+model_id   = 'us.anthropic.claude-sonnet-5-5'
+# Cheaper option once accuracy is proven: 'us.anthropic.claude-haiku-5-5'
+
+# Pages to show Claude first. If no client is found, it tries the next pages,
+# up to pages_max (catches fax cover sheets).
+pages_first_pass = 2
+pages_max        = 4
+
+# Wait this long after the scanner last touched a file before reading it.
+settle_seconds = 60
+
+# Set to true for a trial week: logs proposed names, moves nothing.
+dry_run = false

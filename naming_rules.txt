@@ -1,0 +1,15 @@
+# NAMING RULES
+# Write rules here in plain English, one per line. Claude reads this file before
+# naming every document, so changes take effect on the next run.
+# Lines starting with # are ignored.
+#
+# Examples (delete the # to turn one on):
+#
+# MoveDocs bills: call them "MoveDocs Bill" plus the provider name, for example "MoveDocs Bill Pueblo Medical Imaging".
+# Fax confirmation pages with a letter attached: name the letter, not the fax confirmation.
+# Notices of Hearing from the Hearings Division: always "Notice of Hearing" plus the hearing date.
+# Balance verification forms we sent out blank: "Balance Verification Request" plus the provider. Returned with numbers filled in: "Completed Balance Verification" plus the provider.
+# "Maria Lopez" on workers' comp claim 2024-1234 is GARCIA LOPEZ, Maria.
+# Immigration notices: the client is the petitioner, not the beneficiary.
+
+Claim numbers: when the document clearly shows the client's claim number, add it at the end of the description as "Claim" plus the number, for example "Temporary Light Duty Offer Claim 2024-1234". Copy it exactly, and do not count it toward the 3 to 8 words. If it contains a slash, use a hyphen instead. If no claim number is shown, or any character is hard to read, leave it out.

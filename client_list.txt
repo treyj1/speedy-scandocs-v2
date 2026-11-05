@@ -1,0 +1,3 @@
+# One client per line, "LAST, First". Lines starting with # are ignored.
+# This list can start empty. New clients are added automatically when staff
+# approve them by moving a file from Needs Review to Named.

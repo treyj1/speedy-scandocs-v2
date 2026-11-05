@@ -1,0 +1,25 @@
+# Client data must never reach GitHub. See "Releases on GitHub" in README.md.
+
+# Test data: real-looking client names and documents. Tests stay on this computer.
+test/
+
+# No demo ships. Staff practice on real files, with the guide in the app.
+Speedy Scandocs Demo.vbs
+
+# Scans and logs, wherever they turn up.
+*.pdf
+*.csv
+
+# Settings and keys.
+settings.json
+.env
+.env.*
+
+# Python.
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+*.spec
