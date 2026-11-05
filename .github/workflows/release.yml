@@ -1,7 +1,8 @@
-# Builds the Windows and Mac apps and tests each one on its own system.
+# Builds the Windows installer and Mac disk image, then installs each one and tests the installed
+# app on its own system.
 #
-#   Run workflow (Actions tab): builds and tests, and keeps the zips on the run page for 7 days.
-#   Push a tag such as v1.0.0:  the same, then attaches the zips to a draft release.
+#   Run workflow (Actions tab): keeps the installers on the run page for 7 days.
+#   Push a tag such as v1.1.0:  the same, then attaches them to a draft release.
 #
 # See "Releases on GitHub" in README.md.
 
@@ -53,38 +54,68 @@ jobs:
       - name: Build
         run: python -m PyInstaller packaging/speedy_scandocs.spec --noconfirm
 
-      - name: Self-check the Windows app
+      - name: Make the Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          function Find-Iscc {
+            Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup *\ISCC.exe", "$env:ProgramFiles\Inno Setup *\ISCC.exe" `
+              -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          $iscc = Find-Iscc
+          if (-not $iscc) {
+            choco install innosetup --yes --no-progress
+            $iscc = Find-Iscc
+          }
+          & $iscc.FullName "/DAppVersion=${{ steps.version.outputs.version }}" "/O$PWD" packaging\installer.iss
+          exit $LASTEXITCODE
+
+      - name: Install it and self-check the installed app
         if: runner.os == 'Windows'
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $run = Start-Process -FilePath "dist\Speedy Scandocs\Speedy Scandocs.exe" `
-                               -ArgumentList "--self-check=self_check.txt" -Wait -PassThru
+          $dir = Join-Path $env:RUNNER_TEMP "installed"
+          $setup = Start-Process ".\Speedy-Scandocs-Setup-${{ steps.version.outputs.version }}.exe" `
+                                 -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$dir" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { exit $setup.ExitCode }
+          $run = Start-Process "$dir\Speedy Scandocs.exe" -ArgumentList "--self-check=self_check.txt" -Wait -PassThru
           if (Test-Path self_check.txt) { Get-Content self_check.txt }
           exit $run.ExitCode
 
-      - name: Self-check the Mac app
+      - name: Make the Mac disk image
+        if: runner.os == 'macOS'
+        env:
+          DMG: Speedy-Scandocs-${{ steps.version.outputs.version }}.dmg
+        run: |
+          mkdir dmg
+          # ditto keeps the links and signature inside the app. Plain cp can break them.
+          ditto "dist/Speedy Scandocs.app" "dmg/Speedy Scandocs.app"
+          ln -s /Applications dmg/Applications
+          # hdiutil sometimes reports "Resource busy" on build machines, so it gets three tries.
+          for attempt in 1 2 3; do
+            hdiutil create -volname "Speedy Scandocs" -srcfolder dmg -ov -format UDZO "$DMG" && exit 0
+            sleep 10
+          done
+          exit 1
+
+      - name: Open it and self-check the app inside
         if: runner.os == 'macOS'
         timeout-minutes: 5
         run: |
+          hdiutil attach "Speedy-Scandocs-${{ steps.version.outputs.version }}.dmg" -nobrowse -readonly -mountpoint /tmp/speedy
           status=0
-          "dist/Speedy Scandocs.app/Contents/MacOS/Speedy Scandocs" --self-check=self_check.txt || status=$?
+          "/tmp/speedy/Speedy Scandocs.app/Contents/MacOS/Speedy Scandocs" --self-check=self_check.txt || status=$?
           cat self_check.txt || true
+          hdiutil detach /tmp/speedy
           exit $status
-
-      - name: Zip the Windows app
-        if: runner.os == 'Windows'
-        run: python -c "import shutil; shutil.make_archive('Speedy-Scandocs-${{ steps.version.outputs.version }}-Windows', 'zip', 'dist', 'Speedy Scandocs')"
-
-      - name: Zip the Mac app
-        if: runner.os == 'macOS'
-        # ditto keeps the links and signature inside the app. Plain zip breaks them.
-        run: ditto -c -k --keepParent "dist/Speedy Scandocs.app" "Speedy-Scandocs-${{ steps.version.outputs.version }}-Mac.zip"
 
       - uses: actions/upload-artifact@v7
         with:
           name: speedy-scandocs-${{ matrix.label }}
-          path: Speedy-Scandocs-*.zip
+          path: |
+            Speedy-Scandocs-Setup-*.exe
+            Speedy-Scandocs-*.dmg
           if-no-files-found: error
           retention-days: 7
 
@@ -105,5 +136,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release-files/*.zip \
+          gh release create "$GITHUB_REF_NAME" release-files/* \
             --repo "$GITHUB_REPOSITORY" --title "Speedy Scandocs $GITHUB_REF_NAME" --generate-notes --draft

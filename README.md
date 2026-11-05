@@ -2,14 +2,18 @@
 
 ## The app (start here)
 
-Most people should install the packaged app, which needs no Python:
+Most people should use the installer, which needs no Python:
 
-- **Windows:** unzip `Speedy-Scandocs-<version>-Windows.zip`, keep the whole folder together, and open
-  **Speedy Scandocs.exe** inside it. It isn't signed, so the first time Windows may show "Windows
-  protected your PC". Click **More info**, then **Run anyway**.
-- **Mac (Apple Silicon only):** unzip `Speedy-Scandocs-<version>-Mac.zip` and drag **Speedy Scandocs**
-  to Applications. It isn't signed by Apple, so macOS refuses it the first time. Click **Done**, go to
+- **Windows:** run `Speedy-Scandocs-Setup-<version>.exe`. It needs no administrator, and it adds Start
+  Menu and desktop shortcuts. It isn't signed, so Windows may show "Windows protected your PC". Click
+  **More info**, then **Run anyway**.
+- **Mac (Apple Silicon only):** open `Speedy-Scandocs-<version>.dmg` and drag **Speedy Scandocs** onto
+  Applications. It isn't signed by Apple, so macOS refuses it the first time. Click **Done**, go to
   **System Settings**, **Privacy & Security**, click **Open Anyway** at the bottom, and confirm.
+
+**Updating:** run the newer installer, or on a Mac drag the new app over the old one. Close the app
+first. Settings and the API key are kept outside the app, so they stay, even after uninstalling. If
+someone was using a folder from a 1.0.0 zip, delete that folder after installing.
 
 To run it from this folder instead, double-click **Speedy Scandocs.vbs** on Windows or **Speedy
 Scandocs.command** on a Mac. The first time, it offers to install what it needs.
@@ -274,27 +278,29 @@ Before each push:
 ### Making a release
 
 Windows and Mac apps are built by GitHub, in `.github/workflows/release.yml`, because a Mac app can
-only be built on a Mac. Each one is built with `packaging/speedy_scandocs.spec`, then opened on its
-own system with `--self-check` (`self_check.py`). If that fails, nothing is released.
+only be built on a Mac. Each one is built with `packaging/speedy_scandocs.spec` and put in an
+installer. That installer is then used, and the installed app runs `--self-check` (`self_check.py`) on
+its own system. If that fails, nothing is released.
 
 1. Change `VERSION` in `engine.py`, and push.
-2. To try a build first: on GitHub, **Actions**, **Build release**, **Run workflow**. The zips are on
-   the run's page for 7 days.
+2. To try a build first: on GitHub, **Actions**, **Build release**, **Run workflow**. The installers
+   are on the run's page for 7 days, each inside a zip GitHub adds.
 3. To release, tag it. The tag must be `v` plus `VERSION`, or the build stops:
    ```
    git tag v1.0.0
    git push origin v1.0.0
    ```
-4. The zips land on a draft in **Releases**. Try each one, then click **Publish release**.
+4. The installers land on a draft in **Releases**. Try each one, then click **Publish release**.
 
 The repository is private, so only people with access to it can download from Releases. Share the
-zips with the office some other way, such as Dropbox.
+installers with the office some other way, such as Dropbox.
 
 The self-check proves the packaged app opens and its libraries work, not that a person can use it.
 Try a new Mac build on a real Mac. It can't reach Bedrock, a scanner or the Keychain's real keys.
 
 To build for this computer only: `pip install pyinstaller`, then
-`python -m PyInstaller packaging/speedy_scandocs.spec --noconfirm`. The app is in `dist`.
+`python -m PyInstaller packaging/speedy_scandocs.spec --noconfirm`. The app is in `dist`. For the
+Windows installer, then run `iscc /DAppVersion=<version> /O. packaging\installer.iss` (Inno Setup).
 `GDJ Logo.png` is the logo in the app and `GDJ Logo.ico` is the Windows icon. If the logo changes,
 replace both and run `packaging/make_icons.py` to remake the Mac icon.
 
